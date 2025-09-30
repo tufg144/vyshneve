@@ -14,8 +14,9 @@
             min-height: 100vh;
             background-color: #000;
             cursor: pointer;
+            overflow: hidden;
         }
-        img {
+        video {
             max-width: 100%;
             max-height: 100vh;
             object-fit: contain;
@@ -30,97 +31,107 @@
             padding: 10px 20px;
             border-radius: 5px;
             font-family: Arial, sans-serif;
+            z-index: 100;
+            transition: opacity 0.5s;
+        }
+        .hidden {
+            opacity: 0;
+            pointer-events: none;
         }
     </style>
 </head>
 <body>
-    <img src="vyshneve.jpg" alt="Vyshneve" id="mainImage">
-    <div id="clickMessage">Кликните для включения звука</div>
-    
-    <audio id="player" loop preload="auto">
-        <source src="rehab.mp3" type="audio/mpeg">
-    </audio>
+    <video id="mainVideo" playsinline muted preload="auto" loop>
+        <source src="rehab.MOV" type="video/mp4">
+    </video>
+    <div id="clickMessage" class="hidden">Кликните для включения звука</div>
 
     <script>
-        const audio = document.getElementById('player');
+        const video = document.getElementById('mainVideo');
         const clickMessage = document.getElementById('clickMessage');
         
-        // Стратегия 1: Пытаемся автовоспроизведение сразу
-        function attemptAutoPlay() {
-            audio.play().then(() => {
-                // Успех - скрываем сообщение
-                clickMessage.style.display = 'none';
-                console.log('Автовоспроизведение удалось!');
-            }).catch(error => {
-                // Не удалось - показываем сообщение о клике
-                console.log('Автовоспроизведение заблокировано. Ожидание клика...');
-                clickMessage.style.display = 'block';
-            });
-        }
-
-        // Стратегия 2: Автоклик через небольшую задержку
-        function simulateInteraction() {
-            // Пытаемся программно кликнуть
-            document.body.click();
+        // Улучшенная стратегия автовоспроизведения
+        async function initializeVideo() {
+            // Начинаем с отключенным звуком (это требуется для автовоспроизведения во многих браузерах)
+            video.muted = true;
+            video.volume = 0.7;
             
-            // Пытаемся воспроизвести снова после "взаимодействия"
-            setTimeout(() => {
-                audio.play().then(() => {
-                    clickMessage.style.display = 'none';
-                }).catch(e => {
-                    // Если не сработало, ждем реального клика
-                    waitForRealClick();
-                });
-            }, 100);
+            try {
+                // Пытаемся запустить автовоспроизведение
+                await video.play();
+                
+                // Если успешно, пробуем включить звук через короткое время
+                setTimeout(() => {
+                    attemptUnmute();
+                }, 1000);
+                
+            } catch (error) {
+                // Если автовоспроизведение заблокировано, показываем сообщение
+                console.log('Автовоспроизведение заблокировано:', error);
+                showClickMessage();
+            }
         }
-
-        // Стратегия 3: Ожидание реального клика пользователя
-        function waitForRealClick() {
-            const clickHandler = () => {
-                audio.play().then(() => {
-                    clickMessage.style.display = 'none';
-                });
-                document.body.removeEventListener('click', clickHandler);
-                document.body.removeEventListener('touchstart', clickHandler);
-            };
+        
+        function attemptUnmute() {
+            // Пытаемся включить звук
+            video.muted = false;
             
-            document.body.addEventListener('click', clickHandler);
-            document.body.addEventListener('touchstart', clickHandler);
+            // Проверяем, удалось ли включить звук
+            if (video.muted) {
+                // Если звук все еще отключен, показываем сообщение
+                showClickMessage();
+            } else {
+                // Если звук включен, скрываем сообщение
+                hideClickMessage();
+            }
         }
-
-        // Стратегия 4: Воспроизведение при загрузке страницы
+        
+        function showClickMessage() {
+            clickMessage.classList.remove('hidden');
+        }
+        
+        function hideClickMessage() {
+            clickMessage.classList.add('hidden');
+        }
+        
+        // Обработчики взаимодействия
+        function handleUserInteraction() {
+            if (video.paused) {
+                video.play().then(() => {
+                    video.muted = false;
+                    hideClickMessage();
+                });
+            } else {
+                video.muted = false;
+                hideClickMessage();
+            }
+        }
+        
+        // Инициализация при загрузке страницы
         window.addEventListener('load', function() {
-            // Сначала пытаемся автовоспроизведение
-            attemptAutoPlay();
-            
-            // Если не сработало, пытаемся симуляцию через 1 секунду
-            setTimeout(() => {
-                if (audio.paused) {
-                    simulateInteraction();
-                }
-            }, 1000);
+            initializeVideo();
         });
-
-        // Стратегия 5: Воспроизведение при любом взаимодействии
-        document.body.addEventListener('click', function() {
-            if (audio.paused) {
-                audio.play().then(() => {
-                    clickMessage.style.display = 'none';
-                });
-            }
+        
+        // Обработчики различных событий взаимодействия
+        const interactionEvents = ['click', 'touchstart', 'keydown', 'mousedown', 'mouseover'];
+        interactionEvents.forEach(event => {
+            document.body.addEventListener(event, handleUserInteraction, { once: true });
         });
-
-        // Дополнительно: пытаемся воспроизвести при движении мыши
+        
+        // Дополнительная попытка включения звука при движении мыши
         document.body.addEventListener('mousemove', function() {
-            if (audio.paused) {
-                audio.play().then(() => {
-                    clickMessage.style.display = 'none';
-                });
+            if (video.muted && !video.paused) {
+                video.muted = false;
+                hideClickMessage();
+            }
+        }, { once: true });
+        
+        // Обработка изменения состояния звука
+        video.addEventListener('volumechange', function() {
+            if (!video.muted) {
+                hideClickMessage();
             }
         });
-
-        // Устанавливаем громкость
-        audio.volume = 0.7;
     </script>
 </body>
 </html>
